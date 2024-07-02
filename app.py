@@ -13,7 +13,7 @@ mouse_pos = (0, 0)
 click_event = None
 
 def update_position(pos):
-    pos[0] = max(0, min(600, pos[0] + randint(-10, 10)))
+    pos[0] = max(0, min(800, pos[0] + randint(-10, 10)))
     pos[1] = max(0, min(600, pos[1] + randint(-10, 10)))
 
 def generate_image():
@@ -26,9 +26,9 @@ def generate_image():
         cv2.circle(img, pos_b, 10, (255, 0, 0), -1)
         cv2.circle(img, pos_g, 10, (0, 255, 0), -1)
         cv2.circle(img, pos_r, 10, (0, 0, 255), -1)
-        cv2.putText(img, f'{mouse_pos}', (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(img, f'Mouse Position: {mouse_pos}', (30, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
         if click_event:
-            cv2.putText(img, click_event['text'], (click_event['x'], click_event['y']), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+            cv2.putText(img, click_event['text'], (click_event['x'], click_event['y']), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2)
         _, buffer = cv2.imencode('.jpg', img)
         encoded_image = base64.b64encode(buffer).decode('utf-8')
         cv2.waitKey(100)
@@ -38,68 +38,51 @@ def index():
     return render_template_string('''
         <html>
             <body>
-                <canvas id="canvas" width="600" height="600" style="border:1px solid #000000;"></canvas>
+                <canvas id="canvas" style="border:1px solid #000000;"></canvas>
                 <script>
                     const canvas = document.getElementById('canvas');
                     const ctx = canvas.getContext('2d');
 
-                    canvas.addEventListener('mousemove', function(event) {
+                    canvas.addEventListener('mousemove', event => {
                         const rect = canvas.getBoundingClientRect();
-                        const x = event.clientX - rect.left;
-                        const y = event.clientY - rect.top;
                         fetch('/mousemove', {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({x: x, y: y})
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({x: event.clientX - rect.left, y: event.clientY - rect.top})
                         });
                     });
 
-                    canvas.addEventListener('click', function(event) {
+                    canvas.addEventListener('click', event => {
                         const rect = canvas.getBoundingClientRect();
-                        const x = event.clientX - rect.left;
-                        const y = event.clientY - rect.top;
-                        let click_type = 'left click!';
-                        if (event.detail === 2) {
-                            click_type = 'double click!';
-                        }
+                        let click_type = event.detail === 2 ? 'double click!' : 'left click!';
                         fetch('/click', {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({x: x, y: y, text: click_type})
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({x: event.clientX - rect.left, y: event.clientY - rect.top, text: click_type})
                         });
                     });
 
-                    canvas.addEventListener('contextmenu', function(event) {
+                    canvas.addEventListener('contextmenu', event => {
                         event.preventDefault();
                         const rect = canvas.getBoundingClientRect();
-                        const x = event.clientX - rect.left;
-                        const y = event.clientY - rect.top;
                         fetch('/click', {
                             method: 'POST',
-                            headers: {
-                                'Content-Type': 'application/json'
-                            },
-                            body: JSON.stringify({x: x, y: y, text: 'right click!'})
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify({x: event.clientX - rect.left, y: event.clientY - rect.top, text: 'right click!'})
                         });
                     });
 
                     function updateCanvas() {
-                        fetch('/image')
-                            .then(response => response.json())
-                            .then(data => {
-                                let img = new Image();
-                                img.onload = function() {
-                                    canvas.width = img.width;
-                                    canvas.height = img.height;
-                                    ctx.clearRect(0, 0, canvas.width, canvas.height);
-                                    ctx.drawImage(img, 0, 0);
-                                }
-                                img.src = 'data:image/jpeg;base64,' + data.image;
-                            });
+                        fetch('/image').then(response => response.json()).then(data => {
+                            const img = new Image();
+                            img.onload = () => {
+                                canvas.width = img.width;
+                                canvas.height = img.height;
+                                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                                ctx.drawImage(img, 0, 0);
+                            };
+                            img.src = 'data:image/jpeg;base64,' + data.image;
+                        });
                         requestAnimationFrame(updateCanvas);
                     }
                     updateCanvas();
@@ -115,15 +98,13 @@ def get_image():
 @app.route('/mousemove', methods=['POST'])
 def mousemove():
     global mouse_pos
-    data = request.get_json()
-    mouse_pos = (data['x'], data['y'])
+    mouse_pos = request.json['x'], request.json['y']
     return '', 204
 
 @app.route('/click', methods=['POST'])
 def click():
     global click_event
-    data = request.get_json()
-    click_event = {'x': data['x'], 'y': data['y'], 'text': data['text']}
+    click_event = request.json
     return '', 204
 
 if __name__ == '__main__':
